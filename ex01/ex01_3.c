@@ -1,39 +1,31 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// 링크드 리스트 노드 구조체
+// ListNode 구조체 정의
 typedef struct ListNode {
     int data;
     struct ListNode* next;
 } ListNode;
 
-// 링크드 리스트 구조체
-typedef struct {
+// CircularLinkedList 구조체 정의
+typedef struct CircularLinkedList {
     ListNode* tail;
     int numItems;
 } CircularLinkedList;
 
-// LRUCache 구조체
-typedef struct {
-    int capacity;
-    CircularLinkedList* cache;
-    int cache_hit;
-    int total_refer;
-} LRUCache;
-
 // CircularLinkedList 초기화 함수
-void initialize(CircularLinkedList* list) {
+void initCircularLinkedList(CircularLinkedList* list) {
     list->tail = NULL;
     list->numItems = 0;
 }
 
-// CircularLinkedList에 데이터 추가하는 함수
-void append(CircularLinkedList* list, int newData) {
+// CircularLinkedList에 새로운 노드를 추가하는 함수
+void appendCircularLinkedList(CircularLinkedList* list, int newData) {
     ListNode* newNode = (ListNode*)malloc(sizeof(ListNode));
     newNode->data = newData;
     if (list->tail == NULL) {
-        list->tail = newNode;
         newNode->next = newNode;
+        list->tail = newNode;
     } else {
         newNode->next = list->tail->next;
         list->tail->next = newNode;
@@ -42,88 +34,113 @@ void append(CircularLinkedList* list, int newData) {
     list->numItems++;
 }
 
-// CircularLinkedList에서 데이터 삭제하는 함수
-void removeNode(CircularLinkedList* list, int data) {
-    if (list->tail == NULL)
-        return;
-    ListNode* prev = list->tail;
+// CircularLinkedList에서 노드를 제거하는 함수
+void removeCircularLinkedList(CircularLinkedList* list, int target) {
+    if (list->tail == NULL) return;
     ListNode* curr = list->tail->next;
-    do {
-        if (curr->data == data) {
-            if (curr == list->tail && list->numItems == 1) {
-                free(curr);
-                list->tail = NULL;
-                list->numItems--;
-                return;
-            } else if (curr == list->tail) {
-                prev->next = curr->next;
-                list->tail = prev;
-                free(curr);
-                list->numItems--;
-                return;
-            } else {
-                prev->next = curr->next;
-                free(curr);
-                list->numItems--;
-                return;
+    ListNode* prev = list->tail;
+    while (curr != list->tail) {
+        if (curr->data == target) {
+            prev->next = curr->next;
+            if (curr == list->tail->next) {
+                list->tail->next = curr->next;
             }
+            free(curr);
+            list->numItems--;
+            return;
         }
         prev = curr;
         curr = curr->next;
-    } while (curr != list->tail->next);
+    }
+    if (curr->data == target) {
+        if (list->numItems == 1) {
+            free(curr);
+            list->tail = NULL;
+        } else {
+            prev->next = curr->next;
+            if (curr == list->tail) {
+                list->tail = prev;
+            }
+            free(curr);
+        }
+        list->numItems--;
+    }
 }
+
+// LRUCache 구조체 정의
+typedef struct LRUCache {
+    int capacity;
+    CircularLinkedList cache;
+    int cache_hit;
+    int total_refer;
+} LRUCache;
 
 // LRUCache 초기화 함수
-void LRUCache_init(LRUCache* lru, int capacity) {
-    lru->capacity = capacity;
-    lru->cache = (CircularLinkedList*)malloc(sizeof(CircularLinkedList));
-    initialize(lru->cache);
-    lru->cache_hit = 0;
-    lru->total_refer = 0;
+void initLRUCache(LRUCache* cache, int capacity) {
+    cache->capacity = capacity;
+    initCircularLinkedList(&(cache->cache));
+    cache->cache_hit = 0;
+    cache->total_refer = 0;
 }
 
-// LRUCache에 데이터 추가 및 관리 함수
-void refer(LRUCache* lru, int page) {
-    lru->total_refer++;
-    ListNode* curr = lru->cache->tail == NULL ? NULL : lru->cache->tail->next;
-    while (curr != NULL) {
+// LRUCache에 페이지를 참조하는 함수
+void referLRUCache(LRUCache* cache, int page) {
+    cache->total_refer++;
+    ListNode* curr = cache->cache.tail ? cache->cache.tail->next : NULL;
+    ListNode* prev = cache->cache.tail;
+    while (curr != cache->cache.tail) {
         if (curr->data == page) {
-            removeNode(lru->cache, page);
-            lru->cache_hit++;
-            break;
+            removeCircularLinkedList(&(cache->cache), page);
+            appendCircularLinkedList(&(cache->cache), page);
+            cache->cache_hit++;
+            return;
         }
-        if (curr == lru->cache->tail)
-            break;
+        prev = curr;
         curr = curr->next;
     }
-    if (lru->cache->numItems == lru->capacity) {
-        removeNode(lru->cache, lru->cache->tail->data);
+    if (curr && curr->data == page) {
+        removeCircularLinkedList(&(cache->cache), page);
+        appendCircularLinkedList(&(cache->cache), page);
+        cache->cache_hit++;
+    } else {
+        if (cache->cache.numItems == cache->capacity) {
+            ListNode* toRemove = cache->cache.tail->next;
+            cache->cache.tail->next = toRemove->next;
+            if (toRemove == cache->cache.tail) {
+                cache->cache.tail = cache->cache.tail->next;
+            }
+            free(toRemove);
+            cache->cache.numItems--;
+        }
+        appendCircularLinkedList(&(cache->cache), page);
     }
-    append(lru->cache, page);
 }
 
-// LRUCache의 통계 출력 함수
-void print_stats(LRUCache* lru) {
-    float hit_ratio = lru->total_refer > 0 ? (float)lru->cache_hit / lru->total_refer : 0;
-    printf("cache_slot = %d cache_hit = %d hit ratio = %.5f\n", lru->capacity, lru->cache_hit, hit_ratio);
+// LRUCache의 통계 정보를 출력하는 함수
+void printLRUCacheStats(LRUCache* cache) {
+    float hit_ratio = (float)cache->cache_hit / cache->total_refer;
+    printf("cache_slot = %d cache_hit = %d hit ratio = %.5f\n", cache->capacity, cache->cache_hit, hit_ratio);
 }
 
 int main() {
     FILE* data_file = fopen("./linkbench.trc", "r");
     if (data_file == NULL) {
-        printf("Error: Failed to open the file.\n");
+        printf("Error: Unable to open file.\n");
         return 1;
     }
-    
-    char line[256];
-    LRUCache lru;
+
+    char buffer[256];
+    int page;
+    LRUCache lru_cache;
+
+    // 캐시 크기를 100에서 1000까지 변화시키면서 테스트
     for (int cache_capacity = 100; cache_capacity <= 1000; cache_capacity += 100) {
-        LRUCache_init(&lru, cache_capacity);
-        while (fgets(line, sizeof(line), data_file) != NULL) {
-            int page = atoi(strtok(line, " "));
-            refer(&lru, page);
+        initLRUCache(&lru_cache, cache_capacity);
+        while (fgets(buffer, sizeof(buffer), data_file)) {
+            sscanf(buffer, "%d", &page);
+            referLRUCache(&lru_cache, page);
         }
-        print_stats(&lru);
+        printLRUCacheStats(&lru_cache);
         rewind(data_file);
     }
 
